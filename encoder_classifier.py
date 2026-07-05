@@ -111,6 +111,27 @@ class AutoEncoder(nn.Module):
         )
         
         self.decoder = nn.Sequential(
+            '''
+            The decoder is the mirrored reverse of the encoder. 
+            It takes the 64-dimensional latent space and reconstructs the original waveform.
+            '''
+    
+            nn.Linear(in_features=64, out_features=2*250),
+            # [AFTER THE LINEAR]
+            # Shape: (1, 500)
+            # -> The 64-dimensional latent space is mathematically expanded back into a 500-dimensional space.
+            nn.Unflatten(dim=1, unflattened_size=(2, 250)),
+            # [AFTER THE UNFLATTEN]
+            # Shape: (1, 2, 250)
+            # -> The 1D vector of 500 numbers is reshaped back into a 3D tensor with 2 channels of 250 points each.
+            nn.Upsample(scale_factor=2, mode='nearest'),
+            # [AFTER THE UPSAMPLE]
+            # Shape: (1, 2, 500)
+            # -> The length of the waveform is doubled (from 250 to 500) by repeating each point twice.
+            nn.ConvTranspose1d(in_channels=2, out_channels=1, kernel_size=9, padding=4),
+            # [AFTER THE CONVOLUTION TRANSPOSE]
+            # Shape: (1, 1, 500)
+            # At this point we should have reconstructed the original waveform, but it may not be perfect due to the compression and decompression process.
         )
     
     def forward(self, x):
@@ -124,8 +145,15 @@ class AutoEncoder(nn.Module):
 class Classifier(nn.Module):
     
     def __init__(self):
+        # This is needed to initialize the nn.Module class, which is the base class for all neural network modules in PyTorch.
         super().__init__()
         
         self.classifier = nn.Sequential(
             
         )
+        
+        
+        
+    def forward(self, x):
+        classification = self.classifier(x)
+        return classification
