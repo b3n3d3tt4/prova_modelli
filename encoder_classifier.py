@@ -54,13 +54,17 @@ waves_test, labels_test = dataload(test_path)
 plot_wave(waves_train)
 plot_wave(waves_test)
 
-class AutoEncoderClassifier(nn.Module):
+'''
+The model we are building is a Custom AutoEncoder Classifier, which will be used to classify the waves into two classes (0 and 1).
+The strategy used wil follow the one used in a Germanium physics paper, i.e.
+"Deep learning based pulse shape discrimination for germanium detectors"
+that can be find here: https://arxiv.org/abs/1903.01462
+    
+'''
+
+class AutoEncoder(nn.Module):
     '''
-    The class we are building is a Custom AutoEncoder Classifier, which will be used to classify the waves into two classes (0 and 1).
-    The strategy used wil follow the one used in a Germanium physics paper, i.e.
-    "Deep learning based pulse shape discrimination for germanium detectors"
-    that can be find here: https://arxiv.org/abs/1903.01462
-    The structure will be the following:
+    The AutoEncoderstructure will be the following:
         We build firstly a convolutional layer with:
             - 1 input channel (our waveform of 500 points is a 1D signal    )
             - 2 output channels (we want to extract 2 features from the waveform)
@@ -105,6 +109,9 @@ class AutoEncoderClassifier(nn.Module):
             # -> The 500 pointsare mathematically compressed into a 64-dimensional latent space.
             nn.ReLU()    
         )
+        
+        self.decoder = nn.Sequential(
+        )
     
     def forward(self, x):
         # Here we define the forward pass ion order to process the "x" data through the encoder and obtain the latent representation.
@@ -112,3 +119,13 @@ class AutoEncoderClassifier(nn.Module):
         return latent
 
 
+
+
+class Classifier(nn.Module):
+    
+    def __init__(self):
+        super().__init__()
+        
+        self.classifier = nn.Sequential(
+            
+        )
