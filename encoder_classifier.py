@@ -111,11 +111,9 @@ class AutoEncoder(nn.Module):
         )
         
         self.decoder = nn.Sequential(
-            '''
-            The decoder is the mirrored reverse of the encoder. 
-            It takes the 64-dimensional latent space and reconstructs the original waveform.
-            '''
-    
+            # The decoder is the mirrored reverse of the encoder. 
+            # It takes the 64-dimensional latent space and reconstructs the original waveform.
+            
             nn.Linear(in_features=64, out_features=2*250),
             # [AFTER THE LINEAR]
             # Shape: (1, 500)
