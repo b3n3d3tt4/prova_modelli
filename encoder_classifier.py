@@ -20,7 +20,9 @@ def dataload(path):
     # This operation converts the labels from -1 and 1 to 0 and 1, which is the format we need for our classification task.
     labels_nparray = (labels_nparray + 1)/2
     
-    waves = torch.tensor(waves_nparray, dtype=torch.float32)
+    waves = torch.tensor(waves_nparray, dtype=torch.float32).unsqueeze(1) 
+    # The unsqueeze(1) operation adds a channel dimension to the waves tensor, making it compatible with the Conv1d layer in the AutoEncoder.
+    # This will change the shape of the waves tensor from (N, 500) to (N, 1, 500), where N is the number of waves in the dataset.
     labels = torch.tensor(labels_nparray, dtype=torch.float32)
     
     print(f"Data loaded successfully. Waves shape: {waves.size()}, Labels shape: {labels.size()}")
