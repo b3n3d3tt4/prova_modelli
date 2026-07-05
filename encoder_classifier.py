@@ -137,7 +137,8 @@ class AutoEncoder(nn.Module):
     def forward(self, x):
         # Here we define the forward pass ion order to process the "x" data through the encoder and obtain the latent representation.
         latent = self.encoder(x)
-        return latent
+        reconstructed = self.decoder(latent)
+        return latent, reconstructed
 
 
 
@@ -157,3 +158,17 @@ class Classifier(nn.Module):
     def forward(self, x):
         classification = self.classifier(x)
         return classification
+    
+    
+    
+    
+def loss_function(reconstructed, original):
+    # This function calculates the Mean Squared Error (MSE) loss between the reconstructed waveform and the original waveform.
+    # The MSE loss is a common choice for regression tasks and autoencoders, as it measures the average squared difference between the estimated values and the actual value.
+    return nn.MSELoss()(reconstructed, original)
+
+def backpropagation():
+
+def weights_updating():
+
+def train_autoencoder():
