@@ -397,7 +397,7 @@ def train_classifier(autoencoder, classifier, loader, epochs):
     
     optimizer = optim.Adam(classifier.parameters(), lr=0.001)
     
-    for epoche in range(epochs):
+    for epoch in range(epochs):
         epoch_loss = 0.0
         
         correct_predictions = 0
