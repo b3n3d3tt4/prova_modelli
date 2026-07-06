@@ -137,6 +137,18 @@ class AutoEncoder(nn.Module):
         latent = self.encoder(x)
         reconstructed = self.decoder(latent)
         return latent, reconstructed
+    
+    
+    '''
+    Useful returnings of the AutoEncoder class:
+    - AutoEncoder.encoder() returns the whole sequential block of the encoder
+    - AutoEncoder.decoder() returns the whole sequential block of the decoder
+    - AutoEncoder.parameters() returns the trained parameters of the whole encoder+decoder
+    - AutoEncoder.state_dict() returns a Python dictionary with all the trained parameters 
+    - AutoEncoder.train() put the network in training mode
+    - AutoEncoder.eval() put the network in test mode
+    '''
+    
 
 
 
