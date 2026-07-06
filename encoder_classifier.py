@@ -70,6 +70,41 @@ def plot_wave(wave_array):
     plt.title(f"Wave number {n}")
     plt.show()
     
+    
+# --------------------
+# WHITE NOISE ADDITION
+# --------------------
+
+def white_noise(waves, noise_level=0.05):
+    
+    noise = torch.randn_like(waves) * noise_level
+    
+    noisy_waves = waves + noise
+    
+    return noisy_waves
+
+def time_shift(waves, max_shift=15):
+    
+    batch_size, channels, lenght = waves.shape
+    
+    shifted_waves = torch.zeros_like(waves)
+    
+    for i in range(batch_size):
+        shift = random.randint(-max_shift, +max_shift)
+        
+        if shift > 0:
+            shifted_waves[i, :, shift:] = waves[i, :, -shift] # moves the waveform to the right
+            shifted_waves[i, :, :shift] = waves[i, :, 0:1] # fill the left empty part with the first value (the baseline)
+            
+        elif shift < 0: # this is exactly the same but with left and right inverted
+            shifted_waves[i, :, :shift] = waves[i, :, -shift:]
+            shifted_waves[i, :, shift:] = waves[i, :, -1:]
+            
+        else:
+            shifted_waves[i] = waves[i]
+            
+    return shifted_waves
+    
 
 class AutoEncoder(nn.Module):
     '''
@@ -233,7 +268,7 @@ def train_autoencoder(model, loader, epochs):
     # AUTOENCODER TRAINING
     # --------------------
     
-    optimizer = optim.Adam(model.parameters(), lr=0.001) # This learning rate is the standard for the Adam alghoritm
+    optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5) # This learning rate is the standard for the Adam alghoritm
     
     for epoch in range(epochs):
         
@@ -245,8 +280,14 @@ def train_autoencoder(model, loader, epochs):
             # Gradients initialised to zero
             optimizer.zero_grad() 
             
+            # Time jittering
+            shifted_waves = time_shift(waves)
+            
+            # Noise addition to waves
+            noisy_waves = white_noise(shifted_waves)
+            
             # Forward pass
-            latent, reconstructed = model(waves) # Automatically recalls the forward function
+            latent, reconstructed = model(noisy_waves) # Automatically recalls the forward function
             
             # Loss calculation
             loss = autoencoder_loss(reconstructed, waves)
@@ -328,6 +369,10 @@ def test_autoencoder(model, loader):
     # -----------------------------------------------
         
     waves, _ = next(iter(loader))
+    
+    with torch.no_grad():
+        _, reconstructed = model(waves)
+        
     idx = random.randint(0, waves.size(0) - 1)
     
     original_sample = waves[idx].squeeze().numpy()
@@ -342,3 +387,57 @@ def test_autoencoder(model, loader):
     
               
     return average_test_loss
+
+
+def train_classifier(autoencoder, classifier, loader, epochs):
+    # The autoencoder is in evaluation mode
+    autoencoder.eval()
+    # The classifier is in training mode
+    classifier.train()
+    
+    optimizer = optim.Adam(classifier.parameters(), lr=0.001)
+    
+    for epoche in range(epochs):
+        epoch_loss = 0.0
+        
+        correct_predictions = 0
+        
+        total_samples = 0
+        
+        for waves, labels in loader:
+            optimizer.sero_grad()
+            
+            with torch.no_grad():
+                latent = autoencoder.encoder(waves)[cite:3]
+                
+            predictions = classifier(latent)[cite:3]
+            
+            labels = labels.unsqueeze(1)
+            
+            loss = classifier_loss(predictions, labels)[cite:3]
+            
+            loss.backward()
+            
+            optimizer.step()
+            
+            epoch_loss += loss.item()
+            
+            # Since we use BCEWithLogitsLoss, raw predictions have to be passed in a sigmoid and round up to get 0 or 1
+            predicted_classes = torch.sigmoid(predictions).round()
+            correct_predictions += (predicted_classes == labels).sum().item()
+            total_samples += labels.size(0)
+            
+        average_epoch_loss = epoch_loss / len(loader)
+        accuracy = (correct_predictions / total_samples) * 100
+        
+        print(f"Epoch [{epoch+1}/{epochs}] - Loss: {average_epoch_loss:.4f} - Accuracy: {accuracy:.2f}%")
+        
+    return classifier
+
+# def test_classifier 
+                
+            
+                
+    
+    
+    
