@@ -91,53 +91,84 @@ class AutoEncoder(nn.Module):
         super().__init__()
         
         self.encoder = nn.Sequential(
+            # -------------------------
+            # FIRST CONVOLUTIONAL LAYER
+            # -------------------------
             # [INITIAL INPUT] 
             # The tensor shape is (batch_size, channels, length) i.e. (1, 1, 500) for a single waveform of length 500.
             # -> 1 wf, 1 channel (the raw signal), 500 points length.
-            nn.Conv1d(in_channels=1, out_channels=2, kernel_size=9, padding=4), 
+            nn.Conv1d(in_channels=1, out_channels=16, kernel_size=5, padding=2), 
             # [AFTER THE CONVOLUTION] 
-            # Shape: (1, 2, 500)
-            # -> 2 feature maps (channels) arising from 2 kernels. 
-            # The length remains 500 due to padding=4.
-            nn.ReLU(),   
-            # [AFTER RELU]
-            # Shape: (1, 2, 500)
-            # -> The dimensions remain the same, negative numbers are converted to zeros.
+            # Shape: (1, 16, 500)
+            # -> 16 feature maps (channels) arising from 16 kernels. 
+            # The length remains 500 due to padding=2.
+            nn.LeakyReLU(0.1), # it is better than ReLU for physical signals for a small gradient also negative values are accepted
+            # [AFTER LEAKY RELU]
+            # Shape: (1, 16, 500)
+            # -> The dimensions remain the same, negative numbers are multiplied by a small slope (0.1).
             nn.MaxPool1d(kernel_size=2, stride=2),
             # [AFTER THE MAX POOLING]
-            # Shape: (1, 2, 250)
-            # -> The channels remain 2, but the length of the waveform is halved (from 500 to 250) because we group points 2 by 2.
+            # Shape: (1, 16, 250)
+            # -> The channels remain 16, but the length of the waveform is halved (from 500 to 250) because we group points 2 by 2.
+            
+            
+            # ---------------------------
+            # SECOND CONVOLUTIONAL LAYER
+            # --------------------------
+            nn.Conv1d(in_channels=16, out_channels=32, kernel_size=5, padding=2), 
+            # [AFTER THE CONVOLUTION] 
+            # Shape: (1, 32, 250)
+            # -> 32 feature maps (channels) arising from 32 kernels. 
+            # The length remains 250 due to padding=2.
+            nn.LeakyReLU(0.1), # it is better than ReLU for physical signals for a small gradient also negative values are accepted
+            # [AFTER LEAKY RELU]
+            # Shape: (1, 32, 250)
+            # -> The dimensions remain the same, negative numbers are multiplied by a small slope (0.1).
+            nn.MaxPool1d(kernel_size=2, stride=2),
+            # [AFTER THE MAX POOLING]
+            # Shape: (1, 32, 125)
+            # -> The channels remain 32, but the length of the waveform is halved again (from 250 to 125) because we group points 2 by 2.
+            
+            
             nn.Flatten(),
             # [AFTER THE FLATTEN]
-            # Shape: (1, 500)
-            # -> The 3D world is "flattened" into a 1D vector. 
-            # The 2 channels of 250 points are merged into a single row of 500 numbers (2 * 250 = 500).
-            nn.Linear(in_features=2*250, out_features=64),
+            # Shape: (1, 4000)
+            # -> The 3D tensor is "flattened" into a 1D vector. 
+            # The 32 channels of 125 points are merged into a single row of 4000 numbers (32 * 125 = 4000).
+            nn.Linear(in_features=4000, out_features=128), # 4000 = 32 * 125
             # [AFTER THE LINEAR]
-            # Shape: (1, 64)
-            # -> The 500 pointsare mathematically compressed into a 64-dimensional latent space.
-            nn.ReLU()    
+            # Shape: (1, 128)
+            # -> The 4000 points are mathematically compressed into a 128-dimensional latent space.
+            nn.LeakyReLU(0.1)    
         )
         
         self.decoder = nn.Sequential(
             # The decoder is the mirrored reverse of the encoder. 
-            # It takes the 64-dimensional latent space and reconstructs the original waveform.
+            # It takes the 128-dimensional latent space and reconstructs the original waveform.
             
-            nn.Linear(in_features=64, out_features=2*250),
+            nn.Linear(in_features=128, out_features=4000),
             # [AFTER THE LINEAR]
-            # Shape: (1, 500)
-            # -> The 64-dimensional latent space is mathematically expanded back into a 500-dimensional space.
-            nn.Unflatten(dim=1, unflattened_size=(2, 250)),
+            # Shape: (1, 4000)
+            # -> The 128-dimensional latent space is mathematically expanded back into a 4000-dimensional space.
+            nn.LeakyReLU(0.1),
+            
+            nn.Unflatten(dim=1, unflattened_size=(32, 125)),
             # [AFTER THE UNFLATTEN]
-            # Shape: (1, 2, 250)
-            # -> The 1D vector of 500 numbers is reshaped back into a 3D tensor with 2 channels of 250 points each.
-            nn.Upsample(scale_factor=2, mode='nearest'),
-            # [AFTER THE UPSAMPLE]
-            # Shape: (1, 2, 500)
-            # -> The length of the waveform is doubled (from 250 to 500) by repeating each point twice.
-            nn.ConvTranspose1d(in_channels=2, out_channels=1, kernel_size=9, padding=4),
-            # [AFTER THE CONVOLUTION TRANSPOSE]
+            # Shape: (1, 32, 125)
+            # -> The 1D vector of 4000 numbers is reshaped back into a 3D tensor with 32 channels of 125 points each.
+            
+            nn.ConvTranspose1d(in_channels=32, out_channels=16, kernel_size=4, stride=2, padding=1),
+            nn.LeakyReLU(0.1),
+            # [AFTER THE FIRST CONVOLUTION TRANSPOSE AND LEAKY RELU]
+            # Shape: (1, 16, 250)
+            # -> The transposed convolution learns how to upsample the length of the waveform from 125 to 250, 
+            # while reducing the channels from 32 to 16. Negative values are multiplied by a 0.1 slope.
+            
+            nn.ConvTranspose1d(in_channels=16, out_channels=1, kernel_size=4, stride=2, padding=1),            
+            # [AFTER THE SECOND CONVOLUTION TRANSPOSE]
             # Shape: (1, 1, 500)
+            # -> The transposed convolution learns how to upsample the length of the waveform from 250 to 500,
+            # returning to the single initial channel. 
             # At this point we should have reconstructed the original waveform, but it may not be perfect due to the compression and decompression process.
         )
     
