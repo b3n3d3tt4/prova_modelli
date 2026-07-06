@@ -35,7 +35,8 @@ def dataload(path):
     labels_nparray = (labels_nparray + 1)/2
     
     waves = torch.tensor(waves_nparray, dtype=torch.float32).unsqueeze(1) 
-    # The unsqueeze(1) operation adds a channel dimension to the waves tensor, making it compatible with the Conv1d layer in the AutoEncoder.
+    # The unsqueeze(1) operation adds a channel dimension to the waves tensor, 
+    # making it compatible with the Conv1d layer in the AutoEncoder.
     # This will change the shape of the waves tensor from (N, 500) to (N, 1, 500), where N is the number of waves in the dataset.
     labels = torch.tensor(labels_nparray, dtype=torch.float32)
     
@@ -55,8 +56,8 @@ def plot_wave(wave_array):
     n = random.choice(range(len(wave_array)))
     
     plt.figure(figsize=(8, 4))
-    plt.plot(range(len(wave_array[n])), wave_array[n], color='orange', alpha=0.7, lw=0.8)
-    plt.scatter(range(len(wave_array[n])), wave_array[n], s=10)
+    plt.plot(range(len(wave_array[n][0])), wave_array[n][0], color='orange', alpha=0.7, lw=0.8)
+    plt.scatter(range(len(wave_array[n][0])), wave_array[n][0], s=10)
     plt.title(f"Wave number {n}")
     plt.show()
     
@@ -214,25 +215,3 @@ def train_autoencoder(model, loader, epochs):
 
 
 
-# -------------       
-# DATASET PATHS
-# -------------
-train_path = r"C:\Users\Utente\Desktop\uni\MAGISTRALE\___TESI_magistrale\github\prove_modelli\FordA\TRAIN_set.csv"
-test_path = r"C:\Users\Utente\Desktop\uni\MAGISTRALE\___TESI_magistrale\github\prove_modelli\FordA\TEST_set.csv"
-
-# -------------------------
-# TRAINING DATA PREPARATION
-# -------------------------
-train_dataset, train_loader, waves_train, labels_train = dataload(train_path)
-
-
-# ---------------------
-# TEST DATA PREPARATION
-# ---------------------
-test_dataset, test_loader, waves_test, labels_test = dataload(test_path)
-
-# ---------------------------
-# TEST PLOT TO VISUALISE DATA
-# ---------------------------
-plot_wave(waves_train)
-plot_wave(waves_test)
