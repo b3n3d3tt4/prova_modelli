@@ -189,7 +189,7 @@ def classifier_loss(predicted, label):
 
 def train_autoencoder(model, loader, epochs):
     
-    optimizer = optim.Adam(model.parameters, lr=0.01)
+    optimizer = optim.Adam(model.parameters(), lr=0.01)
     
     for epoch in range(epochs):
         
@@ -202,7 +202,7 @@ def train_autoencoder(model, loader, epochs):
             optimizer.zero_grad() 
             
             # Forward pass
-            latent, reconstructed = model.forward(waves)
+            latent, reconstructed = model(waves) # Automatically recalls the forward function
             
             # Loss calculation
             loss = autoencoder_loss(reconstructed, waves)
