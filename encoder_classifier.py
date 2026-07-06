@@ -227,7 +227,6 @@ class AutoEncoder(nn.Module):
 
 
 
-
 class Classifier(nn.Module):
     
     def __init__(self):
@@ -290,7 +289,7 @@ def train_autoencoder(model, loader, epochs):
             latent, reconstructed = model(noisy_waves) # Automatically recalls the forward function
             
             # Loss calculation
-            loss = autoencoder_loss(reconstructed, waves)
+            loss = autoencoder_loss(reconstructed, noisy_waves)
             
             # Backpropagation
             loss.backward()
@@ -361,7 +360,7 @@ def test_autoencoder(model, loader):
             
         average_test_loss = test_loss / len(loader)
         
-        print(f"Test result: Average loss: {average_test_loss:.4f}")
+        print(f"Recontruction - Test result: Average loss: {average_test_loss:.4f}")
         
         
     # -----------------------------------------------
@@ -398,10 +397,9 @@ def train_classifier(autoencoder, classifier, loader, epochs):
     optimizer = optim.Adam(classifier.parameters(), lr=0.001) 
     
     for epoch in range(epochs):
+        
         epoch_loss = 0.0
-        
         correct_predictions = 0
-        
         total_samples = 0
         
         for waves, labels in loader:
@@ -434,10 +432,39 @@ def train_classifier(autoencoder, classifier, loader, epochs):
         
     return classifier
 
-# def test_classifier 
-                
+def test_classifier (autoencoder, classifier, loader):
+    
+    autoencoder.eval()
+    
+    classifier.eval()          
+        
+    test_loss = 0.0
+    correct_predictions = 0
+    total_samples = 0
+    
+    with torch.no_grad():
+        for waves, labels in (loader):
             
-                
-    
-    
-    
+            # Production of the latent space of the wave
+            latent, _ = autoencoder(waves) # Automatically recalls the forward function
+            
+            # Classification based on the latent space
+            classified = classifier(latent)
+            
+            # Loss evaluation for the single wave
+            loss = classifier_loss(classified, labels)
+            
+            # Test loss updating
+            test_loss += loss.item()
+            
+            # Accuracy calculation
+            predicted_classes = torch.sigmoid(classified).round()
+            correct_predictions += (predicted_classes == labels).sum().item()
+            total_samples += labels.size(0)
+            
+        average_test_loss = test_loss / len(loader)
+        accuracy = (correct_predictions / total_samples) * 100
+        
+        print(f"Classification - Test result: Average loss: {average_test_loss:.4f} \n Accuracy: {accuracy:.2f}%")
+        
+    return average_test_loss, accuracy     
