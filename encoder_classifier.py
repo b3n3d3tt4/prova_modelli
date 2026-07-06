@@ -234,10 +234,15 @@ class Classifier(nn.Module):
         super().__init__()
         
         self.classifier = nn.Sequential(
-            nn.Linear(in_features=64, out_features=32),
-            nn.ReLU(), 
-            nn.Linear(in_features=32, out_features=16),
-            nn.ReLU(),
+            nn.Linear(in_features=128, out_features=64),
+            nn.LeakyReLU(0.1), 
+            nn.Dropout(0.2), # Turns off casually the 20% of the training neurons, 
+            # while when in test mode (classifier.eval()) all of the neurons are alive
+            
+            nn.Linear(in_features=64, out_features=16),
+            nn.LeakyReLU(0.1),
+            nn.Dropout(0.2),
+            
             nn.Linear(in_features=16, out_features=1)            
         )
         
@@ -403,7 +408,7 @@ def train_classifier(autoencoder, classifier, loader, epochs):
         total_samples = 0
         
         for waves, labels in loader:
-            optimizer.sero_grad()
+            optimizer.zero_grad()
             
             with torch.no_grad():
                 latent = autoencoder.encoder(waves)
