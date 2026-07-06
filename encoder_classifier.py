@@ -134,7 +134,7 @@ class AutoEncoder(nn.Module):
             # At this point we should have reconstructed the original waveform, but it may not be perfect due to the compression and decompression process.
         )
     
-    def forward(self, x):
+    def forward_autoencoder(self, x):
         # Here we define the forward pass ion order to process the "x" data through the encoder and obtain the latent representation.
         latent = self.encoder(x)
         reconstructed = self.decoder(latent)
@@ -155,7 +155,7 @@ class Classifier(nn.Module):
         
         
         
-    def forward(self, x):
+    def forward_classifier(self, x):
         classification = self.classifier(x)
         return classification
     
