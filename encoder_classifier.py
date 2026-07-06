@@ -77,7 +77,7 @@ def plot_wave(wave_array):
 
 def white_noise(waves, noise_level=0.05):
     
-    noise = torch.randn_like(waves) * noise_level
+    noise = torch.randn_like(waves) * noise_level # Gaussian-like white noise
     
     noisy_waves = waves + noise
     
@@ -294,7 +294,7 @@ def train_autoencoder(model, loader, epochs):
             latent, reconstructed = model(noisy_waves) # Automatically recalls the forward function
             
             # Loss calculation
-            loss = autoencoder_loss(reconstructed, noisy_waves)
+            loss = autoencoder_loss(reconstructed, shifted_waves)
             
             # Backpropagation
             loss.backward()
@@ -473,3 +473,28 @@ def test_classifier (autoencoder, classifier, loader):
         print(f"Classification - Test result: Average loss: {average_test_loss:.4f} \n Accuracy: {accuracy:.2f}%")
         
     return average_test_loss, accuracy     
+
+
+def masking(waves, ratio=0.75):
+    
+    batch_size, channels, length = waves.shape
+    
+    # We compute how many elements of each wf are going to be set to zero
+    num_masked = int(length * ratio)
+    
+    # We create an initial mask with all False
+    mask = torch.zeros_like(waves, dtype=torch.bool)
+    
+    # For each wf we pick num_masked random points 
+    for i in range(batch_size):
+        
+        random_indices = torch.randperm(length)[:num_masked] 
+        
+        # In the selected indeces positions the mask is turned true
+        mask[i, 0, random_indices] = True
+        
+    # Finally we apply the mask (3D mask) to the whole waves tensor
+    masked_waves = waves.clone()
+    masked_waves[mask] = 0.0
+    
+    return masked_waves
