@@ -1,3 +1,11 @@
+'''
+The model we are building is a Custom AutoEncoder Classifier, which will be used to classify the waves into two classes (0 and 1).
+The strategy used wil follow the one used in a Germanium physics paper, i.e.
+"Deep learning based pulse shape discrimination for germanium detectors"
+that can be find here: https://arxiv.org/abs/1903.01462
+    
+'''
+
 import numpy as np
 import matplotlib.pyplot as plt
 import random
@@ -6,10 +14,16 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.utils.data import TensorDataset, DataLoader
 
-
+# ------------------------------
+# DATA LOADING AND PREPROCESSING
+# ------------------------------
 def dataload(path):
-    print(f"This function loads the data from the specified path and returns the waves and labels (in this order) as torch tensors.")
+    print(f"This function loads the data from the specified path and returns (in this order): \n"
+          " - the dataset"
+          " - the loader"
+          " - the waves and labels")
     print(f"Loading data from {path}...")
     
     # For the italian excel, csv files are separated with ";", while for the rest of the world you should use ","
@@ -20,16 +34,21 @@ def dataload(path):
     # This operation converts the labels from -1 and 1 to 0 and 1, which is the format we need for our classification task.
     labels_nparray = (labels_nparray + 1)/2
     
-    waves = torch.tensor(waves_nparray, dtype=torch.float32, requires_grad=True).unsqueeze(1) 
+    waves = torch.tensor(waves_nparray, dtype=torch.float32).unsqueeze(1) 
     # The unsqueeze(1) operation adds a channel dimension to the waves tensor, making it compatible with the Conv1d layer in the AutoEncoder.
     # This will change the shape of the waves tensor from (N, 500) to (N, 1, 500), where N is the number of waves in the dataset.
-    labels = torch.tensor(labels_nparray, dtype=torch.float32, requires_grad=True)
+    labels = torch.tensor(labels_nparray, dtype=torch.float32)
+    
+    dataset = TensorDataset(waves, labels)
+    loader = DataLoader(dataset, batch_size=32, shuffle=True)
     
     print(f"Data loaded successfully. Waves shape: {waves.size()}, Labels shape: {labels.size()}")
     
-    return waves, labels
+    return dataset, loader, waves, labels
 
-
+# --------------------------
+# WAVEFUNCTION VISUALISATION
+# --------------------------
 def plot_wave(wave_array):
     print(f"This function plots the wave from the provided torch tensor.")
     
@@ -41,28 +60,6 @@ def plot_wave(wave_array):
     plt.title(f"Wave number {n}")
     plt.show()
     
-# -----------------------------       
-# CARICAMENTO DATI DA FILES CSV
-# -----------------------------
-train_path = r"C:\Users\Utente\Desktop\uni\MAGISTRALE\___TESI_magistrale\github\prove_modelli\FordA\TRAIN_set.csv"
-test_path = r"C:\Users\Utente\Desktop\uni\MAGISTRALE\___TESI_magistrale\github\prove_modelli\FordA\TEST_set.csv"
-
-waves_train, labels_train = dataload(train_path)
-waves_test, labels_test = dataload(test_path)
-
-# -------------------------------------
-# PLOT DI TEST PER VISUALIZZARE LE ONDE
-# -------------------------------------
-plot_wave(waves_train)
-plot_wave(waves_test)
-
-'''
-The model we are building is a Custom AutoEncoder Classifier, which will be used to classify the waves into two classes (0 and 1).
-The strategy used wil follow the one used in a Germanium physics paper, i.e.
-"Deep learning based pulse shape discrimination for germanium detectors"
-that can be find here: https://arxiv.org/abs/1903.01462
-    
-'''
 
 class AutoEncoder(nn.Module):
     '''
@@ -134,7 +131,7 @@ class AutoEncoder(nn.Module):
             # At this point we should have reconstructed the original waveform, but it may not be perfect due to the compression and decompression process.
         )
     
-    def forward_autoencoder(self, x):
+    def forward(self, x):
         # Here we define the forward pass ion order to process the "x" data through the encoder and obtain the latent representation.
         latent = self.encoder(x)
         reconstructed = self.decoder(latent)
@@ -158,29 +155,84 @@ class Classifier(nn.Module):
         )
         
         
-    def forward_classifier(self, x):
+    def forward(self, x):
         classification = self.classifier(x)
         return classification
     
 
 def autoencoder_loss(reconstructed, original):
     # This function calculates the Mean Squared Error (MSE) loss between the reconstructed waveform and the original waveform.
-    # The MSE loss is a common choice for regression tasks and autoencoders, as it measures the average squared difference between the estimated values and the actual value.
+    # The MSE loss is a common choice for regression tasks and autoencoders, 
+    # as it measures the average squared difference between the estimated values and the actual value.
     return nn.MSELoss()(reconstructed, original)
 
 def classifier_loss(predicted, label):
     # This function calculates the Binary Cross Entropy (BCE) loss between the predicted labels and the true labels.
-    # The BCE loss is a common choice for binary classification tasks, as it measures the difference between two probability distributions - the predicted probabilities and the actual labels.
-    return nn.MSELoss()(predicted, label)
+    # The BCE loss is a common choice for binary classification tasks, 
+    # as it measures the difference between two probability distributions: 
+    # the predicted probabilities and the actual labels.
+    return nn.BCEWithLogitsLoss()(predicted, label)
 
-def backpropagation(loss, model):
-    loss.backward()
-    optimizer = optim.SGD(model.parameters(), lr=0.01)
-    optimizer.step()
-    optimizer.zero_grad()
+
+def train_autoencoder(model, loader, epochs):
     
-    return 
+    optimizer = optim.Adam(model.parameters, lr=0.01)
+    
+    for epoch in range(epochs):
+        
+        # Epoch loss initalize at zero
+        epoch_loss = 0.0
+        
+        for waves, _ in loader:
+            
+            # Gradients initialised to zero
+            optimizer.zero_grad() 
+            
+            # Forward pass
+            latent, reconstructed = model.forward(waves)
+            
+            # Loss calculation
+            loss = autoencoder_loss(reconstructed, waves)
+            
+            # Backpropagation
+            loss.backward()
+            
+            # Weights upgrade
+            optimizer.step()
+            
+            # Epoch loss calculation
+            epoch_loss += loss.item() # 
+            
+        # Total epoche loss calculation
+        average_epoch_loss = epoch_loss/len(loader)
+        print(f"Epoca [{epoch+1}/{epochs}] - Loss Media: {average_epoch_loss:.4f}")
+            
+            
+    return model
+    
 
-def weights_updating():
 
-def train_autoencoder():
+
+
+# -------------       
+# DATASET PATHS
+# -------------
+train_path = r"C:\Users\Utente\Desktop\uni\MAGISTRALE\___TESI_magistrale\github\prove_modelli\FordA\TRAIN_set.csv"
+test_path = r"C:\Users\Utente\Desktop\uni\MAGISTRALE\___TESI_magistrale\github\prove_modelli\FordA\TEST_set.csv"
+
+# -------------------------
+# TRAINING DATA PREPARATION
+# -------------------------
+train_dataset, train_loader, waves_train, labels_train = dataload(train_path)
+
+
+# ---------------------
+# TEST DATA PREPARATION
+# ---------------------
+test_dataset, test_loader, waves_test, labels_test = dataload(test_path)
+
+# ---------------------------
+# TEST PLOT TO VISUALISE DATA
+# ---------------------------
+plot_wave(waves_train)
+plot_wave(waves_test)
