@@ -245,8 +245,8 @@ def train_autoencoder(model, loader, epochs):
     waves, _ = next(iter(loader))
     
     # We reconstruct the wave through the model with the encoder and decoder
-    with torch.no_grad():
-        latent, reconstructed = model(waves) #
+    with torch.no_grad(): # Since at this point we don't want to compute gradients
+        _, reconstructed = model(waves)  # Automatically recalls the forward function
     
     # We choose a random index in the batch to selcetc 1 of the 32 samples in the chosen batch
     idx = random.randint(0, waves.size(0) - 1)
@@ -258,7 +258,56 @@ def train_autoencoder(model, loader, epochs):
     plt.figure(figsize=(9, 4))
     plt.plot(original_sample, label='Original waveform')
     plt.plot(reconstructed_sample, label='Reconstructed waveform')            
-    plt.title('Original vs Reconstructed comparison')
+    plt.title('Original vs Reconstructed comparison - Training set')
+    plt.legend()
     plt.show()
             
     return model
+
+
+def test_autoencoder(model, loader):
+    
+    # ----------------
+    # AUTOENCODER TEST
+    # ----------------
+    
+    model.eval()
+    
+    test_loss = 0.0
+    
+    with torch.no_grad():
+        for waves, _ in (loader):
+            
+            # Recontruction of the wave
+            _, reconstructed = model(waves) # Automatically recalls the forward function
+            
+            # Loss evaluation for the single wave
+            loss = autoencoder_loss(reconstructed, waves)
+            
+            # Test loss updating
+            test_loss += loss.item()
+            
+        average_test_loss = test_loss / len(loader)
+        
+        print(f"Test result: Average loss: {average_test_loss:.4f}")
+        
+        
+    # -----------------------------------------------
+    # VISUALISATION OF THE AUTOENCODER RECONSTRUCTION
+    # -----------------------------------------------
+        
+    waves, _ = next(iter(loader))
+    idx = random.randint(0, waves.size(0) - 1)
+    
+    original_sample = waves[idx].squeeze().numpy()
+    reconstructed_sample = reconstructed[idx].squeeze().numpy()
+    
+    plt.figure(figsize=(9, 4))
+    plt.plot(original_sample, label='Original waveform')
+    plt.plot(reconstructed_sample, label='Reconstructed waveform')            
+    plt.title('Original vs Reconstructed comparison - Test set')
+    plt.legend()
+    plt.show()
+    
+              
+    return average_test_loss
