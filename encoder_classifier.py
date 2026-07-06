@@ -83,6 +83,9 @@ def white_noise(waves, noise_level=0.05):
     
     return noisy_waves
 
+# --------------
+# TIME JITTERING
+# --------------
 def time_shift(waves, max_shift=15):
     
     batch_size, channels, lenght = waves.shape
@@ -104,6 +107,32 @@ def time_shift(waves, max_shift=15):
             shifted_waves[i] = waves[i]
             
     return shifted_waves
+
+# -------------
+# MASK FUNCTION
+# -------------
+def apply_block_mask(waves, num_blocks=10, block_size=20):
+    
+    batch_size, channels, length = waves.shape
+    
+    # Create an initially all-False mask (no missing points at the beginning)
+    mask = torch.zeros_like(waves, dtype=torch.bool, device=waves.device)
+    
+    for i in range(batch_size):
+        # Generate 'num_blocks' random starting points.
+        # We use (length - block_size) as the upper limit (e.g., 500 - 20 = 480) 
+        # to prevent the block from exceeding the waveform's length.
+        start_indices = torch.randint(0, length - block_size + 1, (num_blocks,))
+        
+        # For each generated starting point, set the mask to True for 'block_size' consecutive points
+        for start in start_indices:
+            mask[i, 0, start : start + block_size] = True
+            
+    # Clone the original waves and apply 0.0 where the mask is True
+    masked_waves = waves.clone()
+    masked_waves[mask] = 0.0
+    
+    return masked_waves, mask
     
 
 class AutoEncoder(nn.Module):
@@ -223,7 +252,7 @@ class AutoEncoder(nn.Module):
     - AutoEncoder.train() put the network in training mode
     - AutoEncoder.eval() put the network in test mode
     '''
-    
+        
 
 
 
@@ -475,26 +504,100 @@ def test_classifier (autoencoder, classifier, loader):
     return average_test_loss, accuracy     
 
 
-def masking(waves, ratio=0.75):
+def train_masked_autoencoder(model, loader, epochs):
     
-    batch_size, channels, length = waves.shape
+    # --------------------
+    # AUTOENCODER TRAINING
+    # --------------------
     
-    # We compute how many elements of each wf are going to be set to zero
-    num_masked = int(length * ratio)
+    optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5) # This learning rate is the standard for the Adam algorithm
     
-    # We create an initial mask with all False
-    mask = torch.zeros_like(waves, dtype=torch.bool)
-    
-    # For each wf we pick num_masked random points 
-    for i in range(batch_size):
+    for epoch in range(epochs):
         
-        random_indices = torch.randperm(length)[:num_masked] 
+        # Epoch loss initialized at zero
+        epoch_loss = 0.0
         
-        # In the selected indeces positions the mask is turned true
-        mask[i, 0, random_indices] = True
+        for waves, _ in loader:
+            
+            # Gradients initialized to zero
+            optimizer.zero_grad() 
+            
+            # Time jittering
+            shifted_waves = time_shift(waves)
+            
+            # Block masking application
+            shifted_masked_waves, mask = apply_block_mask(shifted_waves, num_blocks=10, block_size=20)
+            
+            # Noise addition to waves
+            noisy_masked_waves = white_noise(shifted_masked_waves)
+            
+            # Forward pass
+            latent, reconstructed = model(noisy_masked_waves) # Automatically recalls the forward function
+            
+            # Selective Loss calculation: we only compute the error on the hidden blocks!
+            loss = autoencoder_loss(reconstructed[mask], shifted_waves[mask])
+            
+            # Backpropagation
+            loss.backward()
+            
+            # Weights upgrade
+            optimizer.step()
+            
+            # Epoch loss calculation
+            epoch_loss += loss.item() 
+            
+        # Total epoch loss calculation
+        average_epoch_loss = epoch_loss / len(loader)
+        print(f"Epoch [{epoch+1}/{epochs}] - Average loss: {average_epoch_loss:.4f}")
         
-    # Finally we apply the mask (3D mask) to the whole waves tensor
-    masked_waves = waves.clone()
-    masked_waves[mask] = 0.0
     
-    return masked_waves
+    # -----------------------------------------------
+    # VISUALISATION OF THE AUTOENCODER RECONSTRUCTION
+    # -----------------------------------------------
+    
+    # We put the model in evaluation mode
+    model.eval() 
+    
+    # We extract 1 of the possible batches from the loader
+    waves, _ = next(iter(loader))
+    
+    # We apply the block mask to the test wave to see how the model fills the gaps!
+    masked_waves, mask = apply_block_mask(waves, num_blocks=10, block_size=20)
+    
+    # We reconstruct the wave through the model with the encoder and decoder
+    with torch.no_grad(): # Since at this point we don't want to compute gradients
+        _, reconstructed = model(masked_waves)  # Automatically recalls the forward function
+    
+    # We choose a random index in the batch to select 1 of the 32 samples
+    idx = random.randint(0, waves.size(0) - 1)
+    
+    # We extract data from the single element of the chosen batch and squeeze it into a NumPy array
+    original_sample = waves[idx].squeeze().numpy()
+    reconstructed_sample = reconstructed[idx].squeeze().numpy()
+    
+    # We extract the specific mask for this single wave and convert it to NumPy
+    sample_mask = mask[idx].squeeze().numpy()
+    
+    plt.figure(figsize=(10, 5))
+    
+    # 1. Plot the original wave (slightly transparent to act as a background)
+    plt.plot(original_sample, label='Original waveform', color='tab:blue', alpha=0.4)
+    
+    # 2. Plot the reconstructed wave from the model
+    plt.plot(reconstructed_sample, label='Reconstructed waveform', color='tab:orange', linewidth=2)
+    
+    # 3. HIGHLIGHT THE MISSING ZONES (THE GAPS) IN LIGHT RED
+    # We create an array for the X-axis
+    x_axis = np.arange(len(original_sample))
+    
+    # We use fill_between to color the background vertically where the mask is True.
+    # alpha=0.2 makes it a transparent light red. 
+    # The transform parameter ensures the color spans the entire height of the graph.
+    plt.fill_between(x_axis, 0, 1, where=sample_mask, color='red', alpha=0.2, 
+                     transform=plt.gca().get_xaxis_transform(), label='Masked Zone')
+            
+    plt.title('Masked Autoencoder - Block Reconstruction')
+    plt.legend()
+    plt.show()
+            
+    return model
