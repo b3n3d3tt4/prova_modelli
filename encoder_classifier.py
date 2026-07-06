@@ -485,6 +485,9 @@ def test_classifier (autoencoder, classifier, loader):
             # Classification based on the latent space
             classified = classifier(latent)
             
+            # Unsqueesing of labels
+            labels = labels.unsqueeze(1)
+            
             # Loss evaluation for the single wave
             loss = classifier_loss(classified, labels)
             
@@ -499,7 +502,7 @@ def test_classifier (autoencoder, classifier, loader):
         average_test_loss = test_loss / len(loader)
         accuracy = (correct_predictions / total_samples) * 100
         
-        print(f"Classification - Test result: Average loss: {average_test_loss:.4f} \n Accuracy: {accuracy:.2f}%")
+        print(f"Classification - Test result: \nAverage loss: {average_test_loss:.4f} \nAccuracy: {accuracy:.2f}%")
         
     return average_test_loss, accuracy     
 
