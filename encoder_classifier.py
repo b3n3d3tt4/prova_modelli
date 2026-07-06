@@ -408,13 +408,13 @@ def train_classifier(autoencoder, classifier, loader, epochs):
             optimizer.sero_grad()
             
             with torch.no_grad():
-                latent = autoencoder.encoder(waves)[cite:3]
+                latent = autoencoder.encoder(waves)
                 
-            predictions = classifier(latent)[cite:3]
+            predictions = classifier(latent)
             
             labels = labels.unsqueeze(1)
             
-            loss = classifier_loss(predictions, labels)[cite:3]
+            loss = classifier_loss(predictions, labels)
             
             loss.backward()
             
