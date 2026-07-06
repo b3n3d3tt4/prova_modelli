@@ -20,10 +20,10 @@ def dataload(path):
     # This operation converts the labels from -1 and 1 to 0 and 1, which is the format we need for our classification task.
     labels_nparray = (labels_nparray + 1)/2
     
-    waves = torch.tensor(waves_nparray, dtype=torch.float32).unsqueeze(1) 
+    waves = torch.tensor(waves_nparray, dtype=torch.float32, requires_grad=True).unsqueeze(1) 
     # The unsqueeze(1) operation adds a channel dimension to the waves tensor, making it compatible with the Conv1d layer in the AutoEncoder.
     # This will change the shape of the waves tensor from (N, 500) to (N, 1, 500), where N is the number of waves in the dataset.
-    labels = torch.tensor(labels_nparray, dtype=torch.float32)
+    labels = torch.tensor(labels_nparray, dtype=torch.float32, requires_grad=True)
     
     print(f"Data loaded successfully. Waves shape: {waves.size()}, Labels shape: {labels.size()}")
     
@@ -150,24 +150,36 @@ class Classifier(nn.Module):
         super().__init__()
         
         self.classifier = nn.Sequential(
-            
+            nn.Linear(in_features=64, out_features=32),
+            nn.ReLU(), 
+            nn.Linear(in_features=32, out_features=16),
+            nn.ReLU(),
+            nn.Linear(in_features=16, out_features=1)            
         )
-        
         
         
     def forward_classifier(self, x):
         classification = self.classifier(x)
         return classification
     
-    
-    
-    
-def loss_function(reconstructed, original):
+
+def autoencoder_loss(reconstructed, original):
     # This function calculates the Mean Squared Error (MSE) loss between the reconstructed waveform and the original waveform.
     # The MSE loss is a common choice for regression tasks and autoencoders, as it measures the average squared difference between the estimated values and the actual value.
     return nn.MSELoss()(reconstructed, original)
 
-def backpropagation():
+def classifier_loss(predicted, label):
+    # This function calculates the Binary Cross Entropy (BCE) loss between the predicted labels and the true labels.
+    # The BCE loss is a common choice for binary classification tasks, as it measures the difference between two probability distributions - the predicted probabilities and the actual labels.
+    return nn.MSELoss()(predicted, label)
+
+def backpropagation(loss, model):
+    loss.backward()
+    optimizer = optim.SGD(model.parameters(), lr=0.01)
+    optimizer.step()
+    optimizer.zero_grad()
+    
+    return 
 
 def weights_updating():
 
