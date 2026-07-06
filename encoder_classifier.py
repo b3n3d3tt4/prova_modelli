@@ -29,19 +29,28 @@ def dataload(path):
     # For the italian excel, csv files are separated with ";", while for the rest of the world you should use ","
     data = pd.read_csv(path, sep=';', skiprows=1, header=None) 
     
-    waves_nparray = data.iloc[:, 1:].to_numpy()
+    waves_nparray = data.iloc[:, 1:501].to_numpy()
     labels_nparray = data.iloc[:, 0].to_numpy()
     # This operation converts the labels from -1 and 1 to 0 and 1, which is the format we need for our classification task.
     labels_nparray = (labels_nparray + 1)/2
     
-    waves = torch.tensor(waves_nparray, dtype=torch.float32).unsqueeze(1) 
+    waves = torch.tensor(waves_nparray, dtype=torch.float32)
+    labels = torch.tensor(labels_nparray, dtype=torch.float32)
+    
+    mean = waves.mean(dim=1, keepdim=True)
+    std = waves.std(dim=1, keepdim=True)
+    
+    waves = (waves - mean) / (std+1e-9) # Avoiding divisions by zero
+    
     # The unsqueeze(1) operation adds a channel dimension to the waves tensor, 
     # making it compatible with the Conv1d layer in the AutoEncoder.
     # This will change the shape of the waves tensor from (N, 500) to (N, 1, 500), where N is the number of waves in the dataset.
-    labels = torch.tensor(labels_nparray, dtype=torch.float32)
+    waves = waves.unsqueeze(1)
     
     dataset = TensorDataset(waves, labels)
-    loader = DataLoader(dataset, batch_size=32, shuffle=True)
+    loader = DataLoader(dataset, batch_size=32, shuffle=True) 
+    # batch_size is the dimension of the wave packets to analyse
+    # shuffle=True allows waveforms mixing
     
     print(f"Data loaded successfully. Waves shape: {waves.size()}, Labels shape: {labels.size()}")
     
@@ -189,7 +198,11 @@ def classifier_loss(predicted, label):
 
 def train_autoencoder(model, loader, epochs):
     
-    optimizer = optim.Adam(model.parameters(), lr=0.01)
+    # --------------------
+    # AUTOENCODER TRAINING
+    # --------------------
+    
+    optimizer = optim.Adam(model.parameters(), lr=0.001) # This learning rate is the standard for the Adam alghoritm
     
     for epoch in range(epochs):
         
@@ -214,16 +227,38 @@ def train_autoencoder(model, loader, epochs):
             optimizer.step()
             
             # Epoch loss calculation
-            epoch_loss += loss.item() # 
+            epoch_loss += loss.item() 
             
-        # Total epoche loss calculation
+        # Total epoch loss calculation
         average_epoch_loss = epoch_loss/len(loader)
-        print(f"Epoca [{epoch+1}/{epochs}] - Loss Media: {average_epoch_loss:.4f}")
-            
+        print(f"Epoch [{epoch+1}/{epochs}] - Average loss: {average_epoch_loss:.4f}")
+        
+    
+    
+    # -----------------------------------------------
+    # VISUALISATION OF THE AUTOENCODER RECONSTRUCTION
+    # -----------------------------------------------
+    # We put the model in evaluation mode
+    model.eval() 
+    
+    # We extract 1 of the possible batches from the loader
+    waves, _ = next(iter(loader))
+    
+    # We reconstruct the wave through the model with the encoder and decoder
+    with torch.no_grad():
+        latent, reconstructed = model(waves) #
+    
+    # We choose a random index in the batch to selcetc 1 of the 32 samples in the chosen batch
+    idx = random.randint(0, waves.size(0) - 1)
+    
+    # We extract data from the single element of the chosen bax and squeeze it into a NumPy array
+    original_sample = waves[idx].squeeze().numpy()
+    reconstructed_sample = reconstructed[idx].squeeze().numpy()
+    
+    plt.figure(figsize=(9, 4))
+    plt.plot(original_sample, label='Original waveform')
+    plt.plot(reconstructed_sample, label='Reconstructed waveform')            
+    plt.title('Original vs Reconstructed comparison')
+    plt.show()
             
     return model
-    
-
-
-
-
