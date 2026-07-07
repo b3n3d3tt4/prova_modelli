@@ -10,6 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import random
 import pandas as pd
+import copy
 
 import torch
 import torch.nn as nn
@@ -422,34 +423,39 @@ def test_autoencoder(model, loader):
     return average_test_loss
 
 
-def train_classifier(autoencoder, classifier, loader, epochs):
+def train_classifier(autoencoder, classifier, train_loader, validation_loader, epochs, patience=30): 
+    # patience is the maximum number of epochs for which we tolerate that the accuracy doesn't improve
+    
     # The autoencoder is in evaluation mode
     autoencoder.eval()
-    # The classifier is in training mode
-    classifier.train()
     
-    optimizer = optim.Adam(classifier.parameters(), lr=0.001) 
+    optimizer = optim.Adam(classifier.parameters(), lr=0.001, weight_decay=1e-4) # weight_decay avoids overfitting 
+    
+    # We implement also validation in order to avoid overfitting
+    best_val_loss = float('inf') 
+    epochs_no_improve = 0
+    best_model_weights = copy.deepcopy(classifier.state_dict())
     
     for epoch in range(epochs):
+        
+        # The classifier is in training mode
+        classifier.train()
         
         epoch_loss = 0.0
         correct_predictions = 0
         total_samples = 0
         
-        for waves, labels in loader:
+        for waves, labels in train_loader:
             optimizer.zero_grad()
             
             with torch.no_grad():
                 latent = autoencoder.encoder(waves)
                 
             predictions = classifier(latent)
-            
             labels = labels.unsqueeze(1)
             
             loss = classifier_loss(predictions, labels)
-            
             loss.backward()
-            
             optimizer.step()
             
             epoch_loss += loss.item()
@@ -459,11 +465,44 @@ def train_classifier(autoencoder, classifier, loader, epochs):
             correct_predictions += (predicted_classes == labels).sum().item()
             total_samples += labels.size(0)
             
-        average_epoch_loss = epoch_loss / len(loader)
-        accuracy = (correct_predictions / total_samples) * 100
+        train_accuracy = (correct_predictions / total_samples) * 100
+        average_train_loss = epoch_loss / len(train_loader)
         
-        print(f"Epoch [{epoch+1}/{epochs}] - Loss: {average_epoch_loss:.4f} - Accuracy: {accuracy:.2f}%")
+        # -----------------
+        # VALIDATION PHASE
+        # -----------------
+        classifier.eval()
+        val_loss = 0.0
         
+        with torch.no_grad():
+            for waves, labels in validation_loader:
+                latent = autoencoder.encoder(waves)
+                predictions = classifier(latent)
+                labels = labels.unsqueeze(1)
+                loss = classifier_loss(predictions, labels)
+                validation_loss += loss.item()
+                
+        average_validation_loss = validation_loss / len(validation_loader)
+        
+        print(f"Epoch [{epoch+1}/{epochs}] - Train Loss: {average_train_loss:.4f} - Val Loss: {average_validation_loss:.4f} - Train Acc: {train_accuracy:.2f}%")
+        
+        # -----------------
+        # EARLY STOPPING
+        # -----------------
+        if average_validation_loss < best_validation_loss:
+            best_validation_loss = average_validation_loss
+            epochs_no_improve = 0
+            # Save the best weights
+            best_model_weights = copy.deepcopy(classifier.state_dict())
+        else:
+            epochs_no_improve += 1
+            
+        if epochs_no_improve >= patience:
+            print(f"\nEarly stopping triggered at epoch {epoch+1}! Restoring best weights.")
+            break
+
+    # Restore the model to the state where it had the lowest validation loss
+    classifier.load_state_dict(best_model_weights)
     return classifier
 
 def test_classifier (autoencoder, classifier, loader):
