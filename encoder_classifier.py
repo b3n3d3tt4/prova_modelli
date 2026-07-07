@@ -429,7 +429,8 @@ def train_classifier(autoencoder, classifier, train_loader, validation_loader, e
     # The autoencoder is in evaluation mode
     autoencoder.eval()
     
-    optimizer = optim.Adam(classifier.parameters(), lr=0.001, weight_decay=1e-4) # weight_decay avoids overfitting 
+    optimizer = optim.Adam(classifier.parameters(), lr=0.001, weight_decay=1e-4)
+    # weight_decay avoids overfitting because implements regularisation(L2)
     
     # We implement also validation in order to avoid overfitting
     best_val_loss = float('inf') 
@@ -484,7 +485,7 @@ def train_classifier(autoencoder, classifier, train_loader, validation_loader, e
                 
         average_validation_loss = validation_loss / len(validation_loader)
         
-        print(f"Epoch [{epoch+1}/{epochs}] - Train Loss: {average_train_loss:.4f} - Val Loss: {average_validation_loss:.4f} - Train Acc: {train_accuracy:.2f}%")
+        print(f"Epoch [{epoch+1}/{epochs}] \nTrain Loss: {average_train_loss:.4f} \nValidation Loss: {average_validation_loss:.4f} \nTrain Accuracy: {train_accuracy:.2f}%")
         
         # -----------------
         # EARLY STOPPING
