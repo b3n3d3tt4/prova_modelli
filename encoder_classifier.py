@@ -11,16 +11,17 @@ import matplotlib.pyplot as plt
 import random
 import pandas as pd
 import copy
+import h5py
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import TensorDataset, DataLoader
+from torch.utils.data import TensorDataset, DataLoader, random_split
 
-# ------------------------------
-# DATA LOADING AND PREPROCESSING
-# ------------------------------
-def dataload(path):
+# --------------------------------------------
+# DATA LOADING AND PREPROCESSING for CSV files
+# --------------------------------------------
+def dataload_csv(path):
     print(f"This function loads the data from the specified path and returns (in this order): \n"
           " - the dataset"
           " - the loader"
@@ -265,13 +266,15 @@ class Classifier(nn.Module):
         
         self.classifier = nn.Sequential(
             nn.Linear(in_features=128, out_features=64),
+            nn.BatchNorm1d(num_features=64), # Normalisaation to regularise against overfitting
             nn.LeakyReLU(0.1), 
-            nn.Dropout(0.2), # Turns off casually the 20% of the training neurons, 
+            nn.Dropout(0.3), # Turns off casually the 30% of the training neurons, 
             # while when in test mode (classifier.eval()) all of the neurons are alive
             
             nn.Linear(in_features=64, out_features=16),
+            nn.BatchNorm1d(num_features=16),
             nn.LeakyReLU(0.1),
-            nn.Dropout(0.2),
+            nn.Dropout(0.3),
             
             nn.Linear(in_features=16, out_features=1)            
         )
@@ -423,8 +426,27 @@ def test_autoencoder(model, loader):
     return average_test_loss
 
 
-def train_classifier(autoencoder, classifier, train_loader, validation_loader, epochs, patience=30): 
+def train_classifier(autoencoder, classifier, loader, epochs, patience=50): 
     # patience is the maximum number of epochs for which we tolerate that the accuracy doesn't improve
+    
+    # -------------------------
+    # DATASET SPLIT (80% / 20%)
+    # -------------------------
+    dataset = loader.dataset
+    batch_size = loader.batch_size
+    
+    # Calcoliamo le dimensioni (80% train, 20% validation)
+    train_size = int(0.8 * len(dataset))
+    validation_size = len(dataset) - train_size
+    
+    # Dividiamo il dataset casualmente
+    train_dataset, validation_dataset = random_split(dataset, [train_size, validation_size])
+    
+    # Creiamo i due nuovi loader interni
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    validation_loader = DataLoader(validation_dataset, batch_size=batch_size, shuffle=False)
+    
+    print(f"Dataset splittato: {train_size} sample per il Train, {validation_size} sample per la Validation.\n")
     
     # The autoencoder is in evaluation mode
     autoencoder.eval()
@@ -433,7 +455,7 @@ def train_classifier(autoencoder, classifier, train_loader, validation_loader, e
     # weight_decay avoids overfitting because implements regularisation(L2)
     
     # We implement also validation in order to avoid overfitting
-    best_val_loss = float('inf') 
+    best_validation_loss = float('inf') 
     epochs_no_improve = 0
     best_model_weights = copy.deepcopy(classifier.state_dict())
     
@@ -473,7 +495,7 @@ def train_classifier(autoencoder, classifier, train_loader, validation_loader, e
         # VALIDATION PHASE
         # -----------------
         classifier.eval()
-        val_loss = 0.0
+        validation_loss = 0.0
         
         with torch.no_grad():
             for waves, labels in validation_loader:
