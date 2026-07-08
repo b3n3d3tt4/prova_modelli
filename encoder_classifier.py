@@ -168,6 +168,7 @@ class AutoEncoder(nn.Module):
             # Shape: (1, 16, 500)
             # -> 16 feature maps (channels) arising from 16 kernels. 
             # The length remains 500 due to padding=2.
+            nn.BatchNorm1d(16),
             nn.LeakyReLU(0.1), # it is better than ReLU for physical signals for a small gradient also negative values are accepted
             # [AFTER LEAKY RELU]
             # Shape: (1, 16, 500)
@@ -186,6 +187,7 @@ class AutoEncoder(nn.Module):
             # Shape: (1, 32, 250)
             # -> 32 feature maps (channels) arising from 32 kernels. 
             # The length remains 250 due to padding=2.
+            nn.BatchNorm1d(32),
             nn.LeakyReLU(0.1), # it is better than ReLU for physical signals for a small gradient also negative values are accepted
             # [AFTER LEAKY RELU]
             # Shape: (1, 32, 250)
@@ -201,9 +203,9 @@ class AutoEncoder(nn.Module):
             # Shape: (1, 4000)
             # -> The 3D tensor is "flattened" into a 1D vector. 
             # The 32 channels of 125 points are merged into a single row of 4000 numbers (32 * 125 = 4000).
-            nn.Linear(in_features=4000, out_features=128), # 4000 = 32 * 125
+            nn.Linear(in_features=4000, out_features=256), # 4000 = 32 * 125
             # [AFTER THE LINEAR]
-            # Shape: (1, 128)
+            # Shape: (1, 256)
             # -> The 4000 points are mathematically compressed into a 128-dimensional latent space.
             nn.LeakyReLU(0.1)    
         )
@@ -212,7 +214,7 @@ class AutoEncoder(nn.Module):
             # The decoder is the mirrored reverse of the encoder. 
             # It takes the 128-dimensional latent space and reconstructs the original waveform.
             
-            nn.Linear(in_features=128, out_features=4000),
+            nn.Linear(in_features=256, out_features=4000),
             # [AFTER THE LINEAR]
             # Shape: (1, 4000)
             # -> The 128-dimensional latent space is mathematically expanded back into a 4000-dimensional space.
@@ -423,7 +425,107 @@ def test_autoencoder(model, loader):
     plt.show()
     
               
-    return average_test_loss
+    return average_test_loss     
+
+
+def train_masked_autoencoder(model, loader, epochs):
+    
+    # --------------------
+    # AUTOENCODER TRAINING
+    # --------------------
+    
+    optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5) # This learning rate is the standard for the Adam algorithm
+    
+    for epoch in range(epochs):
+        
+        # Epoch loss initialized at zero
+        epoch_loss = 0.0
+        
+        for waves, _ in loader:
+            
+            # Gradients initialized to zero
+            optimizer.zero_grad() 
+            
+            # Time jittering
+            shifted_waves = time_shift(waves)
+            
+            # Block masking application
+            shifted_masked_waves, mask = apply_block_mask(shifted_waves, num_blocks=10, block_size=20)
+            
+            # Noise addition to waves
+            noisy_masked_waves = white_noise(shifted_masked_waves)
+            
+            # Forward pass
+            latent, reconstructed = model(noisy_masked_waves) # Automatically recalls the forward function
+            
+            # Selective Loss calculation: we only compute the error on the hidden blocks!
+            loss = autoencoder_loss(reconstructed[mask], shifted_waves[mask])
+            
+            # Backpropagation
+            loss.backward()
+            
+            # Weights upgrade
+            optimizer.step()
+            
+            # Epoch loss calculation
+            epoch_loss += loss.item() 
+            
+        # Total epoch loss calculation
+        average_epoch_loss = epoch_loss / len(loader)
+        print(f"Epoch [{epoch+1}/{epochs}] - Average loss: {average_epoch_loss:.4f}")
+        
+    
+    # -----------------------------------------------
+    # VISUALISATION OF THE AUTOENCODER RECONSTRUCTION
+    # -----------------------------------------------
+    
+    # We put the model in evaluation mode
+    model.eval() 
+    
+    # We extract 1 of the possible batches from the loader
+    waves, _ = next(iter(loader))
+    
+    # We apply the block mask to the test wave to see how the model fills the gaps!
+    masked_waves, mask = apply_block_mask(waves, num_blocks=10, block_size=20)
+    
+    # We reconstruct the wave through the model with the encoder and decoder
+    with torch.no_grad(): # Since at this point we don't want to compute gradients
+        _, reconstructed = model(masked_waves)  # Automatically recalls the forward function
+    
+    # We choose a random index in the batch to select 1 of the 32 samples
+    idx = random.randint(0, waves.size(0) - 1)
+    
+    # We extract data from the single element of the chosen batch and squeeze it into a NumPy array
+    original_sample = waves[idx].squeeze().numpy()
+    reconstructed_sample = reconstructed[idx].squeeze().numpy()
+    
+    # We extract the specific mask for this single wave and convert it to NumPy
+    sample_mask = mask[idx].squeeze().numpy()
+    
+    plt.figure(figsize=(9, 4))
+    
+    # 1. Plot the original wave
+    plt.plot(original_sample, label='Original waveform')
+    
+    # 2. Plot the reconstructed wave from the model
+    plt.plot(reconstructed_sample, label='Reconstructed waveform')
+    
+    # 3. HIGHLIGHT THE MISSING ZONES (THE GAPS) IN LIGHT RED
+    # We create an array for the X-axis
+    x_axis = np.arange(len(original_sample))
+    
+    # We use fill_between to color the background vertically where the mask is True.
+    # alpha=0.2 makes it a transparent light red. 
+    # The transform parameter ensures the color spans the entire height of the graph.
+    plt.fill_between(x_axis, 0, 1, where=sample_mask, color='red', alpha=0.2, 
+                     transform=plt.gca().get_xaxis_transform(), label='Masked Zone')
+            
+    plt.title('Masked Autoencoder - Block Reconstruction')
+    plt.legend()
+    plt.show()
+            
+    return model    
+    
 
 
 def train_classifier(autoencoder, classifier, loader, epochs, patience=50): 
@@ -566,103 +668,4 @@ def test_classifier (autoencoder, classifier, loader):
         
         print(f"Classification - Test result: \nAverage loss: {average_test_loss:.4f} \nAccuracy: {accuracy:.2f}%")
         
-    return average_test_loss, accuracy     
-
-
-def train_masked_autoencoder(model, loader, epochs):
-    
-    # --------------------
-    # AUTOENCODER TRAINING
-    # --------------------
-    
-    optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5) # This learning rate is the standard for the Adam algorithm
-    
-    for epoch in range(epochs):
-        
-        # Epoch loss initialized at zero
-        epoch_loss = 0.0
-        
-        for waves, _ in loader:
-            
-            # Gradients initialized to zero
-            optimizer.zero_grad() 
-            
-            # Time jittering
-            shifted_waves = time_shift(waves)
-            
-            # Block masking application
-            shifted_masked_waves, mask = apply_block_mask(shifted_waves, num_blocks=10, block_size=20)
-            
-            # Noise addition to waves
-            noisy_masked_waves = white_noise(shifted_masked_waves)
-            
-            # Forward pass
-            latent, reconstructed = model(noisy_masked_waves) # Automatically recalls the forward function
-            
-            # Selective Loss calculation: we only compute the error on the hidden blocks!
-            loss = autoencoder_loss(reconstructed[mask], shifted_waves[mask])
-            
-            # Backpropagation
-            loss.backward()
-            
-            # Weights upgrade
-            optimizer.step()
-            
-            # Epoch loss calculation
-            epoch_loss += loss.item() 
-            
-        # Total epoch loss calculation
-        average_epoch_loss = epoch_loss / len(loader)
-        print(f"Epoch [{epoch+1}/{epochs}] - Average loss: {average_epoch_loss:.4f}")
-        
-    
-    # -----------------------------------------------
-    # VISUALISATION OF THE AUTOENCODER RECONSTRUCTION
-    # -----------------------------------------------
-    
-    # We put the model in evaluation mode
-    model.eval() 
-    
-    # We extract 1 of the possible batches from the loader
-    waves, _ = next(iter(loader))
-    
-    # We apply the block mask to the test wave to see how the model fills the gaps!
-    masked_waves, mask = apply_block_mask(waves, num_blocks=10, block_size=20)
-    
-    # We reconstruct the wave through the model with the encoder and decoder
-    with torch.no_grad(): # Since at this point we don't want to compute gradients
-        _, reconstructed = model(masked_waves)  # Automatically recalls the forward function
-    
-    # We choose a random index in the batch to select 1 of the 32 samples
-    idx = random.randint(0, waves.size(0) - 1)
-    
-    # We extract data from the single element of the chosen batch and squeeze it into a NumPy array
-    original_sample = waves[idx].squeeze().numpy()
-    reconstructed_sample = reconstructed[idx].squeeze().numpy()
-    
-    # We extract the specific mask for this single wave and convert it to NumPy
-    sample_mask = mask[idx].squeeze().numpy()
-    
-    plt.figure(figsize=(10, 5))
-    
-    # 1. Plot the original wave (slightly transparent to act as a background)
-    plt.plot(original_sample, label='Original waveform', color='tab:blue', alpha=0.4)
-    
-    # 2. Plot the reconstructed wave from the model
-    plt.plot(reconstructed_sample, label='Reconstructed waveform', color='tab:orange', linewidth=2)
-    
-    # 3. HIGHLIGHT THE MISSING ZONES (THE GAPS) IN LIGHT RED
-    # We create an array for the X-axis
-    x_axis = np.arange(len(original_sample))
-    
-    # We use fill_between to color the background vertically where the mask is True.
-    # alpha=0.2 makes it a transparent light red. 
-    # The transform parameter ensures the color spans the entire height of the graph.
-    plt.fill_between(x_axis, 0, 1, where=sample_mask, color='red', alpha=0.2, 
-                     transform=plt.gca().get_xaxis_transform(), label='Masked Zone')
-            
-    plt.title('Masked Autoencoder - Block Reconstruction')
-    plt.legend()
-    plt.show()
-            
-    return model
+    return average_test_loss, accuracy
