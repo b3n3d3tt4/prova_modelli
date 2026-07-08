@@ -267,7 +267,7 @@ class Classifier(nn.Module):
         super().__init__()
         
         self.classifier = nn.Sequential(
-            nn.Linear(in_features=128, out_features=64),
+            nn.Linear(in_features=256, out_features=64),
             nn.BatchNorm1d(num_features=64), # Normalisaation to regularise against overfitting
             nn.LeakyReLU(0.1), 
             nn.Dropout(0.3), # Turns off casually the 30% of the training neurons, 
